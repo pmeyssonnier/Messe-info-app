@@ -40,6 +40,10 @@ Aucune installation ni serveur : l'application est un unique fichier HTML.
 - Géocodage : [Base Adresse Nationale](https://adresse.data.gouv.fr) (API Adresse, service public gratuit).
 - Fonds de carte : [OpenStreetMap](https://www.openstreetmap.org/copyright) et contributeurs, CARTO.
 
+## Licence
+
+Distribué sous licence **MIT**. Voir le fichier [`LICENSE`](LICENSE).
+
 ## Avertissement
 
 Cette application lit des informations publiques. Les horaires affichés dépendent de la mise à jour des paroisses sur messes.info ; vérifiez toujours auprès de la paroisse en cas de doute. Les distances sont calculées à vol d'oiseau.
