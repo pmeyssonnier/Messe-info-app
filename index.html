@@ -451,6 +451,29 @@
     }
     .fav-item-remove:hover { color: var(--danger); background: #fdecea; }
 
+    /* Statut : plus de boîte permanente, masqué quand il n'y a rien à dire */
+    .status[hidden], .status:empty { display: none; }
+
+    /* Actions d'export réduites à des icônes, sur la ligne du titre */
+    .result-actions { display: flex; gap: 6px; margin-left: auto; }
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; padding: 0; min-height: auto;
+      background: var(--surface-2); color: var(--primary-dark);
+      border: 1px solid var(--border); border-radius: 10px; cursor: pointer;
+    }
+    .icon-btn svg { width: 18px; height: 18px; }
+    .icon-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); transform: none; }
+
+    /* Bouton « Recadrer » superposé au coin supérieur droit de la carte */
+    .map-fit-btn {
+      background: #fff; border: 0; border-radius: 8px;
+      padding: 7px 11px; font-weight: 750; font-size: .82rem;
+      color: var(--primary-dark); cursor: pointer;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, .3);
+    }
+    .map-fit-btn:hover { background: var(--surface-2); transform: none; }
+
     .footer-note {
       color: var(--muted);
       font-size: .78rem;
@@ -476,7 +499,7 @@
       .summary { grid-template-columns: repeat(2, 1fr); }
       .main-grid { display: flex; flex-direction: column; }
       #map { height: 430px; }
-      .result-head { align-items: flex-start; flex-direction: column; }
+      .result-head { align-items: center; }
     }
   </style>
 </head>
@@ -519,15 +542,7 @@
       <input type="hidden" id="userKey" value="" />
       <input type="hidden" id="sourceMode" value="html" />
 
-      <div id="originBar" class="origin-bar" hidden>
-        <span id="originIcon">📍</span>
-        <span>Point de référence : <strong id="originLabel">—</strong></span>
-        <button id="originClear" class="btn-secondary" title="Effacer le point de référence">Effacer</button>
-      </div>
-
-      <div id="status" class="status">
-        Saisissez une commune française, ou cliquez sur « Autour de moi » : les messes se chargent automatiquement.
-      </div>
+      <div id="status" class="status" hidden></div>
     </section>
 
     <section id="favPanel" class="panel fav-panel" hidden>
@@ -605,9 +620,25 @@
       <section class="panel results-panel">
         <div class="result-head">
           <h2>Liste des célébrations</h2>
-          <button id="fitBtn" class="btn-secondary" title="Recadrer la carte sur les résultats">Recadrer</button>
-          <button id="csvBtn" class="btn-secondary">Exporter CSV</button>
-          <button id="icsBtn" class="btn-secondary">Exporter iCal</button>
+          <div class="result-actions">
+            <button id="csvBtn" class="icon-btn" title="Exporter en CSV" aria-label="Exporter en CSV">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            </button>
+            <button id="icsBtn" class="icon-btn" title="Exporter en iCal (agenda)" aria-label="Exporter en iCal">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="18" rx="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+            </button>
+          </div>
         </div>
         <div id="churchDetail" class="church-detail" hidden></div>
         <div id="results" class="results">
@@ -838,15 +869,8 @@
         if (els.onlyFuture) els.onlyFuture.checked = !!f.onlyFuture;
         if (els.onlyFav) els.onlyFav.checked = !!f.onlyFav;
         updateDistances();
-        if (state.userPosition) {
-          drawUserMarker();
-          els.originIcon.textContent = state.userPosition.kind === "gps" ? "🛰️" : "📍";
-          els.originLabel.textContent = state.userPosition.label
-            || `${state.userPosition.lat.toFixed(4)}, ${state.userPosition.lng.toFixed(4)}`;
-          els.originBar.hidden = false;
-        }
+        if (state.userPosition) drawUserMarker();
         applyFilters(true);
-        setStatus(`Session restaurée (${state.masses.length} célébrations, ${new Date(data.savedAt).toLocaleString("fr-FR")}).`, "success");
         return true;
       } catch (e) { return false; }
     }
@@ -854,11 +878,10 @@
     const els = Object.fromEntries([
       "placeSearch", "placeSuggest", "placeClear", "locateBtn", "status",
       "sourceMode", "favPanel", "favList",
-      "originBar", "originIcon", "originLabel", "originClear",
       "totalCount", "visibleCount", "cityCount", "nearestValue",
       "textSearch", "cityFilter", "postalFilter", "dayFilter",
       "dateFrom", "maxDistance", "resetBtn", "results", "churchDetail", "csvBtn",
-      "sortBy", "onlyFuture", "onlyFav", "moreBtn", "icsBtn", "fitBtn",
+      "sortBy", "onlyFuture", "onlyFav", "moreBtn", "icsBtn",
       "apiLat", "apiLng", "apiDays", "userKey"
     ].map(id => [id, document.getElementById(id)]));
 
@@ -897,6 +920,28 @@
     ).addTo(map);
 
     L.control.scale({ imperial: false }).addTo(map);
+
+    /* Bouton « Recadrer » superposé au coin supérieur droit de la carte
+       (recadre la vue sur les résultats ; le filtrage ne bouge plus la carte). */
+    const FitControl = L.Control.extend({
+      options: { position: "topright" },
+      onAdd() {
+        const btn = L.DomUtil.create("button", "map-fit-btn");
+        btn.type = "button";
+        btn.textContent = "Recadrer";
+        btn.title = "Recadrer la carte sur les résultats";
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.on(btn, "click", () => {
+          if (!state.filtered.length) {
+            setStatus("Aucun résultat à cadrer.", "warning");
+            return;
+          }
+          renderMap(true);
+        });
+        return btn;
+      }
+    });
+    map.addControl(new FitControl());
 
     state.markerLayer = L.layerGroup().addTo(map);
 
@@ -953,9 +998,20 @@
         .trim();
     }
 
+    let statusTimer = null;
     function setStatus(message, type = "") {
-      els.status.textContent = message;
+      els.status.textContent = message || "";
       els.status.className = `status ${type}`.trim();
+      els.status.hidden = !message;
+      clearTimeout(statusTimer);
+      // Les messages d'info/chargement/succès disparaissent seuls (pas d'encombrement).
+      if (message && type !== "error") {
+        statusTimer = setTimeout(() => {
+          els.status.textContent = "";
+          els.status.hidden = true;
+          els.status.className = "status";
+        }, 4500);
+      }
     }
 
     function parseFrenchDate(raw) {
@@ -1406,9 +1462,6 @@
 
       els.apiLat.value = lat.toFixed(7);
       els.apiLng.value = lng.toFixed(7);
-      els.originIcon.textContent = kind === "gps" ? "🛰️" : "📍";
-      els.originLabel.textContent = label;
-      els.originBar.hidden = false;
 
       updateDistances();
       drawUserMarker();
@@ -1418,7 +1471,6 @@
 
     function clearOrigin() {
       state.userPosition = null;
-      els.originBar.hidden = true;
       els.placeSearch.value = "";
       if (state.userMarker) { map.removeLayer(state.userMarker); state.userMarker = null; }
       updateDistances();
@@ -2027,9 +2079,55 @@
       URL.revokeObjectURL(link.href);
     }
 
+    // Export iCal (.ics) : une entrée d'agenda d'1 h par célébration datée
+    function exportIcs() {
+      if (!state.filtered.length) {
+        setStatus("Aucune donnée à exporter.", "warning");
+        return;
+      }
+
+      const pad = n => String(n).padStart(2, "0");
+      const stamp = ts => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+               `T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+      };
+      const esc = s => String(s || "").replace(/([,;\\])/g, "\\$1").replace(/\r?\n/g, "\\n");
+
+      const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Messe-info-app//FR//", "CALSCALE:GREGORIAN"];
+      state.filtered.forEach((m, i) => {
+        if (!Number.isFinite(m.timestamp)) return;
+        const start = m.timestamp;
+        const end = start + 60 * 60 * 1000;
+        const loc = [m.church, `${m.postalCode} ${m.city}`.trim()].filter(Boolean).join(", ");
+        const desc = [
+          m.celebration, m.parish ? `Paroisse : ${m.parish}` : "", m.detailUrl
+        ].filter(Boolean).join(" | ");
+        lines.push(
+          "BEGIN:VEVENT",
+          `UID:messe-${i}-${start}@messe-info-app`,
+          `DTSTART:${stamp(start)}`,
+          `DTEND:${stamp(end)}`,
+          `SUMMARY:${esc(`Messe — ${m.church}`)}`,
+          `LOCATION:${esc(loc)}`
+        );
+        if (desc) lines.push(`DESCRIPTION:${esc(desc)}`);
+        lines.push("END:VEVENT");
+      });
+      lines.push("END:VCALENDAR");
+
+      const blob = new Blob([lines.join("\r\n")], { type: "text/calendar;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `messes_${new Date().toISOString().slice(0, 10)}.ics`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    }
+
     els.locateBtn.addEventListener("click", locateUser);
     els.resetBtn.addEventListener("click", resetFilters);
     els.csvBtn.addEventListener("click", exportCsv);
+    els.icsBtn.addEventListener("click", exportIcs);
 
     /* Champ de recherche de lieu : les suggestions s'affichent pendant la
        frappe ; on choisit un lieu dans la liste (ou on valide avec Entrée).
@@ -2045,18 +2143,6 @@
       hideSuggest();
       updatePlaceClear();
       els.placeSearch.focus();
-    });
-
-    // Bouton « Effacer » du point de référence (n'était pas branché non plus)
-    els.originClear.addEventListener("click", clearOrigin);
-
-    // Recadrage désormais manuel : le filtrage ne bouge plus la carte
-    els.fitBtn.addEventListener("click", () => {
-      if (!state.filtered.length) {
-        setStatus("Aucun résultat à cadrer.", "warning");
-        return;
-      }
-      renderMap(true);
     });
 
     const debouncedFilters = debounce(applyFilters, 200);
