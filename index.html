@@ -424,6 +424,12 @@
     .cd-gcal:hover { text-decoration: underline; }
     .cd-empty { color: var(--muted); justify-content: center; }
     .cd-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .cd-photo {
+      width: 100%; max-height: 190px; object-fit: cover;
+      border-radius: 10px; margin-bottom: 10px; display: block;
+      background: var(--surface-2);
+    }
+    .cd-fiche-load { margin-top: 8px; font-size: .82rem; color: var(--muted); font-style: italic; }
 
     /* Panneau « Mes favoris » : accès rapide aux églises épinglées */
     .fav-panel { margin-bottom: 18px; }
@@ -689,6 +695,7 @@
       userMarker: null,
       selectedIndex: null,
       detailMass: null,
+      detailCache: new Map(),
       pageSize: 60,
       shown: 60
     };
@@ -2025,6 +2032,85 @@
     }
 
     // Panneau de détail : église sélectionnée + ses prochaines messes
+    /* ------------------------------------------------------------
+       Fiche église : récupération de la page messes.info du lieu pour
+       afficher sa photo et ses horaires habituels (dont les messes de
+       semaine, ex. 7h, absentes de la liste « autour d'un point »).
+       Lecteur tolérant + repli gracieux ; résultats mis en cache.
+       ------------------------------------------------------------ */
+    async function fetchHtmlQuiet(url) {
+      const targets = [
+        url,
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`
+      ];
+      for (const t of targets) {
+        try {
+          const res = await fetch(t, { headers: { Accept: "text/html" } });
+          if (!res.ok) continue;
+          const text = await res.text();
+          if (text && text.length > 300) return text;
+        } catch (e) { /* on tente la stratégie suivante */ }
+      }
+      return null;
+    }
+
+    // Extraction « best effort » des horaires : lignes commençant par HHhMM
+    function parseFicheSchedule(doc) {
+      const out = [];
+      const seen = new Set();
+      const nodes = doc.querySelectorAll("li, tr, td, p, div, span");
+      for (const n of nodes) {
+        if (n.children.length > 2) continue; // ignore les gros conteneurs
+        const txt = (n.textContent || "").replace(/ /g, " ").replace(/\s+/g, " ").trim();
+        if (txt.length > 70) continue;
+        const m = txt.match(/^(\d{1,2})h(\d{2})\b(.*)$/);
+        if (!m) continue;
+        const time = `${m[1].padStart(2, "0")}h${m[2]}`;
+        const label = (m[3] || "")
+          .replace(/\b\d+\s*min\b/i, "")
+          .replace(/[|–—•]+/g, " ")
+          .replace(/^[\s:–-]+/, "")
+          .replace(/\s+/g, " ")
+          .trim();
+        const key = `${time}|${label.toLowerCase()}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ time, label });
+        if (out.length >= 40) break;
+      }
+      return out;
+    }
+
+    function parseFiche(html, baseUrl) {
+      const doc = new DOMParser().parseFromString(html, "text/html");
+
+      // Photo : d'abord la balise Open Graph, sinon une image de contenu
+      let photo =
+        doc.querySelector('meta[property="og:image"], meta[name="og:image"], meta[name="twitter:image"]')
+          ?.getAttribute("content") || "";
+      if (!photo) {
+        const img = [...doc.querySelectorAll("img")].find(im => {
+          const s = im.getAttribute("src") || "";
+          return s && !/logo|icon|sprite|pixel|blank|avatar|banniere|banner|pub|ad[-_]/i.test(s);
+        });
+        photo = img ? img.getAttribute("src") : "";
+      }
+      if (photo) { try { photo = new URL(photo, baseUrl).href; } catch (e) {} }
+
+      return { photo, schedule: parseFicheSchedule(doc), loading: false };
+    }
+
+    async function loadFiche(mass) {
+      const url = mass && mass.detailUrl;
+      if (!url || state.detailCache.has(url)) return;
+      state.detailCache.set(url, { loading: true, photo: "", schedule: [] });
+      const html = await fetchHtmlQuiet(url);
+      state.detailCache.set(url, html ? parseFiche(html, url) : { loading: false, photo: "", schedule: [] });
+      // Rafraîchit si le panneau montre toujours cette église
+      if (state.detailMass && state.detailMass.detailUrl === url) renderChurchDetail(state.detailMass);
+    }
+
     function renderChurchDetail(mass) {
       if (!els.churchDetail) return;
       state.detailMass = mass || null;
@@ -2044,7 +2130,28 @@
         : `<li class="cd-empty">Aucune messe à venir référencée pour ce lieu.</li>`;
 
       const from = state.userPosition ? `${state.userPosition.lat},${state.userPosition.lng}` : "";
+
+      // Données de la fiche messes.info (photo + horaires habituels), si récupérées
+      const fiche = mass.detailUrl ? state.detailCache.get(mass.detailUrl) : null;
+
+      const photoHtml = fiche && fiche.photo
+        ? `<img class="cd-photo" src="${escapeHtml(fiche.photo)}" alt="${escapeHtml(mass.church)}"
+               loading="lazy" onerror="this.remove()">`
+        : "";
+
+      let ficheHtml = "";
+      if (fiche && fiche.loading) {
+        ficheHtml = `<div class="cd-fiche-load">Récupération de la fiche…</div>`;
+      } else if (fiche && fiche.schedule && fiche.schedule.length) {
+        ficheHtml =
+          `<div class="cd-title">Horaires habituels (fiche)</div>
+           <ul class="cd-list">${fiche.schedule.map(s => `
+             <li><span class="cd-date">${escapeHtml(s.time)}</span>${s.label
+               ? `<span class="cd-cel">${escapeHtml(s.label)}</span>` : ""}</li>`).join("")}</ul>`;
+      }
+
       els.churchDetail.innerHTML = `
+        ${photoHtml}
         <div class="cd-head">
           <div>
             <div class="cd-church">${escapeHtml(mass.church)}</div>
@@ -2058,9 +2165,10 @@
         </div>
         <div class="cd-title">Prochaines messes${list.length ? ` (${list.length})` : ""}</div>
         <ul class="cd-list">${items}</ul>
+        ${ficheHtml}
         <div class="cd-links">
           ${mass.parishUrl ? `<a class="chip" href="${escapeHtml(mass.parishUrl)}" target="_blank" rel="noopener">Horaires de la paroisse</a>` : ""}
-          ${mass.detailUrl ? `<a class="chip" href="${escapeHtml(mass.detailUrl)}" target="_blank" rel="noopener">Fiche du lieu</a>` : ""}
+          ${mass.detailUrl ? `<a class="chip" href="${escapeHtml(mass.detailUrl)}" target="_blank" rel="noopener">Fiche complète</a>` : ""}
           <a class="chip" href="https://www.google.com/maps/dir/?api=1&origin=${from}&destination=${mass.latitude},${mass.longitude}" target="_blank" rel="noopener">Itinéraire</a>
         </div>
       `;
@@ -2068,6 +2176,9 @@
 
       els.churchDetail.querySelector("#cdClose")?.addEventListener("click", () => renderChurchDetail(null));
       els.churchDetail.querySelector("#cdFav")?.addEventListener("click", () => toggleFavorite(mass));
+
+      // Récupère la fiche (photo + horaires) une seule fois, en arrière-plan
+      if (mass.detailUrl && !state.detailCache.has(mass.detailUrl)) loadFiche(mass);
     }
 
     function selectCard(index) {
