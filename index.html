@@ -231,6 +231,28 @@
       margin-bottom: 18px;
     }
 
+    /* Bouton « Autour de moi » : libellé + icône cible alignée à droite */
+    .locate-btn { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .locate-ico { width: 19px; height: 19px; flex: 0 0 auto; }
+
+    /* Accordéon des filtres (« box recherche »), fermé par défaut */
+    .filters-acc { margin-bottom: 18px; }
+    .filters-acc > summary {
+      list-style: none; cursor: pointer;
+      display: flex; align-items: center; gap: 9px;
+      padding: 13px 15px; font-weight: 750; color: var(--text);
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+    }
+    .filters-acc > summary::-webkit-details-marker { display: none; }
+    .filters-acc > summary::before {
+      content: "\25B8"; color: var(--primary); font-size: 1em;
+      transition: transform .15s ease;
+    }
+    .filters-acc[open] > summary::before { transform: rotate(90deg); }
+    .filters-acc[open] > summary { margin-bottom: 12px; }
+    .filters-acc .filters { margin-bottom: 0; }
+
     .main-grid {
       display: grid;
       grid-template-columns: minmax(0, 1.08fr) minmax(370px, .92fr);
@@ -475,7 +497,18 @@
           </div>
           <div id="placeSuggest" class="suggest" hidden></div>
         </div>
-        <button id="locateBtn" class="btn-success">Ma position</button>
+        <button id="locateBtn" class="btn-success locate-btn" title="Rechercher autour de ma position">
+          <span>Autour de moi</span>
+          <svg class="locate-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="7" />
+            <line x1="12" y1="1.5" x2="12" y2="4.5" />
+            <line x1="12" y1="19.5" x2="12" y2="22.5" />
+            <line x1="1.5" y1="12" x2="4.5" y2="12" />
+            <line x1="19.5" y1="12" x2="22.5" y2="12" />
+            <circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
       </div>
 
       <!-- Paramètres techniques conservés (champs cachés) : utilisés par le
@@ -493,7 +526,7 @@
       </div>
 
       <div id="status" class="status">
-        Saisissez une commune française, ou cliquez sur « Ma position » : les messes se chargent automatiquement.
+        Saisissez une commune française, ou cliquez sur « Autour de moi » : les messes se chargent automatiquement.
       </div>
     </section>
 
@@ -509,7 +542,9 @@
       <div class="metric"><span>Plus proche</span><strong id="nearestValue">—</strong></div>
     </section>
 
-    <section class="panel filters">
+    <details class="filters-acc">
+      <summary class="filters-summary">Recherche avancée et filtres</summary>
+      <section class="panel filters">
       <div>
         <label for="textSearch">Recherche</label>
         <input id="textSearch" type="search" autocomplete="off" placeholder="Église, ville, code postal, paroisse…" />
@@ -559,7 +594,8 @@
         <input id="onlyFav" type="checkbox" style="width:auto;min-height:auto" />
       </div>
       <button id="resetBtn" class="btn-danger">Réinitialiser</button>
-    </section>
+      </section>
+    </details>
 
     <main class="main-grid">
       <section class="panel">
