@@ -417,6 +417,11 @@
     .cd-list li:last-child { border-bottom: 0; }
     .cd-date { font-weight: 750; color: var(--text); }
     .cd-cel { color: var(--primary); font-size: .86rem; font-style: italic; }
+    .cd-gcal {
+      margin-left: auto; white-space: nowrap; text-decoration: none;
+      color: var(--primary); font-size: .8rem; font-weight: 700;
+    }
+    .cd-gcal:hover { text-decoration: underline; }
     .cd-empty { color: var(--muted); justify-content: center; }
     .cd-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 
@@ -1628,6 +1633,31 @@
       })[char]);
     }
 
+    /* Lien « Ajouter à Google Agenda » pour une célébration : URL TEMPLATE de
+       Google Calendar (un événement d'1 h). N'ajoute qu'un événement à la fois ;
+       pour tout l'agenda, l'export iCal s'importe dans Google Calendar. */
+    function googleCalUrl(mass) {
+      if (!Number.isFinite(mass.timestamp)) return "";
+      const pad = n => String(n).padStart(2, "0");
+      const fmt = ts => {
+        const d = new Date(ts);
+        return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}` +
+               `T${pad(d.getHours())}${pad(d.getMinutes())}00`;
+      };
+      const start = mass.timestamp;
+      const end = start + 60 * 60 * 1000;
+      const params = new URLSearchParams({
+        action: "TEMPLATE",
+        text: `Messe — ${mass.church}`,
+        dates: `${fmt(start)}/${fmt(end)}`,
+        location: [mass.church, `${mass.postalCode} ${mass.city}`.trim()].filter(Boolean).join(", "),
+        details: [
+          mass.celebration, mass.parish ? `Paroisse : ${mass.parish}` : "", mass.detailUrl
+        ].filter(Boolean).join(" | ")
+      });
+      return `https://calendar.google.com/calendar/render?${params.toString()}`;
+    }
+
     function markerPopup(mass) {
       const distance = mass.distanceKm == null
         ? ""
@@ -1663,7 +1693,8 @@
       const times = group
         .slice()
         .sort((a, b) => (a.mass.timestamp || 0) - (b.mass.timestamp || 0))
-        .map(({ mass: m }) => `<li>${escapeHtml(displayDate(m))}${m.celebration ? ` — <i>${escapeHtml(m.celebration)}</i>` : ""}</li>`)
+        .map(({ mass: m }) => `<li>${escapeHtml(displayDate(m))}${m.celebration ? ` — <i>${escapeHtml(m.celebration)}</i>` : ""}` +
+          `${googleCalUrl(m) ? ` &middot; <a href="${escapeHtml(googleCalUrl(m))}" target="_blank" rel="noopener">Google Agenda</a>` : ""}</li>`)
         .join("");
 
       return `
@@ -1787,7 +1818,10 @@
             ? `<a class="chip" data-stop href="${escapeHtml(m.detailUrl)}" target="_blank" rel="noopener">Fiche du lieu</a>`
             : "",
           `<a class="chip" data-stop target="_blank" rel="noopener"
-              href="https://www.google.com/maps/dir/?api=1&origin=${state.userPosition ? `${state.userPosition.lat},${state.userPosition.lng}` : ""}&destination=${m.latitude},${m.longitude}">Itinéraire</a>`
+              href="https://www.google.com/maps/dir/?api=1&origin=${state.userPosition ? `${state.userPosition.lat},${state.userPosition.lng}` : ""}&destination=${m.latitude},${m.longitude}">Itinéraire</a>`,
+          googleCalUrl(m)
+            ? `<a class="chip" data-stop href="${escapeHtml(googleCalUrl(m))}" target="_blank" rel="noopener">Google Agenda</a>`
+            : ""
         ].filter(Boolean).join("");
 
         return `
@@ -1864,6 +1898,7 @@
             <li>
               <span class="cd-date">${escapeHtml(displayDate(m))}</span>
               ${m.celebration ? `<span class="cd-cel">${escapeHtml(m.celebration)}</span>` : ""}
+              ${googleCalUrl(m) ? `<a class="cd-gcal" href="${escapeHtml(googleCalUrl(m))}" target="_blank" rel="noopener" title="Ajouter à Google Agenda">+ Agenda</a>` : ""}
             </li>`).join("")
         : `<li class="cd-empty">Aucune messe à venir référencée pour ce lieu.</li>`;
 
