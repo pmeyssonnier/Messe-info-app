@@ -1204,9 +1204,11 @@
         });
       }
 
+      /* On conserve les célébrations SANS coordonnées : elles seront replacées
+         par géocodage (repli) plus tard, plutôt que d'être écartées ici. */
       return masses
-        .filter(m => m.church && Number.isFinite(m.latitude) && Number.isFinite(m.longitude))
-        .sort((a, b) => a.timestamp - b.timestamp);
+        .filter(m => m.church)
+        .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
     }
 
     async function fetchWithFallback(url) {
@@ -1356,15 +1358,23 @@
           const payload = await fetchJson(url);
           const masses = collectRecords(payload)
             .map(mapApiRecord)
-            .filter(m => m.church && Number.isFinite(m.latitude) && Number.isFinite(m.longitude));
+            .filter(m => m.church);
 
           if (!masses.length) throw new Error("aucun enregistrement exploitable");
 
+          const approx = await fillMissingCoords(masses);
+          const geocoded = masses.filter(m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude));
+          if (!geocoded.length) throw new Error("aucun enregistrement exploitable");
+
           const limit = Date.now() + days * 86400000;
-          const kept = masses.filter(m => !Number.isFinite(m.timestamp) || m.timestamp <= limit);
+          const kept = geocoded.filter(m => !Number.isFinite(m.timestamp) || m.timestamp <= limit);
 
           setData(kept);
-          setStatus(`${kept.length} célébration(s) chargée(s) depuis l'API MessesInfo.`, "success");
+          setStatus(
+            `${kept.length} célébration(s) chargée(s) depuis l'API MessesInfo` +
+            (approx ? ` — dont ${approx} replacée(s) approximativement.` : "."),
+            "success"
+          );
           return;
         } catch (e) {
           errors.push(e.message);
@@ -1384,6 +1394,79 @@
        ============================================================ */
 
     const BAN_URL = "https://api-adresse.data.gouv.fr/search/";
+
+    /* ------------------------------------------------------------
+       Repli de géocodage : certaines célébrations de messes.info
+       n'ont pas de coordonnées dans la page « autour d'un point ».
+       Plutôt que de les écarter (invisibles sur la carte ET dans la
+       liste), on récupère des coordonnées via la Base Adresse
+       Nationale — d'abord l'église, sinon le centre de la commune.
+       Résultats mis en cache pour limiter les requêtes.
+       ------------------------------------------------------------ */
+    const geoCache = new Map();
+
+    async function geocodeQuery(q, postcode, type) {
+      q = String(q || "").trim();
+      if (!q) return null;
+      const key = `${type || ""}|${q}|${postcode || ""}`;
+      if (geoCache.has(key)) return geoCache.get(key);
+
+      let coords = null;
+      try {
+        const params = new URLSearchParams({ q, limit: "1" });
+        if (postcode) params.set("postcode", String(postcode).trim());
+        if (type) params.set("type", type);
+        const res = await fetch(`${BAN_URL}?${params.toString()}`);
+        if (res.ok) {
+          const data = await res.json();
+          const f = data.features && data.features[0];
+          const co = f && f.geometry && f.geometry.coordinates;
+          if (co && Number.isFinite(co[1]) && Number.isFinite(co[0])) {
+            coords = { lat: co[1], lng: co[0] };
+          }
+        }
+      } catch (e) { /* réseau indisponible : on renverra null */ }
+
+      geoCache.set(key, coords);
+      return coords;
+    }
+
+    async function geocodeCoords(mass) {
+      // 1) l'église + la ville (parfois reconnue comme voie/lieu-dit)
+      let c = null;
+      if (mass.church) c = await geocodeQuery(`${mass.church} ${mass.city || ""}`, mass.postalCode, "");
+      // 2) repli fiable : centre de la commune
+      if (!c && (mass.city || mass.postalCode)) {
+        c = await geocodeQuery(mass.city || mass.postalCode, mass.postalCode, "municipality");
+      }
+      return c;
+    }
+
+    // Complète les coordonnées manquantes ; une requête par lieu unique.
+    async function fillMissingCoords(masses) {
+      const hasCoords = m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude);
+      const missing = masses.filter(m => !hasCoords(m));
+      if (!missing.length) return 0;
+
+      const byPlace = new Map();
+      missing.forEach(m => {
+        const k = `${normalize(m.church)}|${m.postalCode}|${normalize(m.city)}`;
+        if (!byPlace.has(k)) byPlace.set(k, []);
+        byPlace.get(k).push(m);
+      });
+
+      let filled = 0;
+      await Promise.all([...byPlace.values()].map(async group => {
+        const c = await geocodeCoords(group[0]);
+        if (c) group.forEach(m => {
+          m.latitude = c.lat;
+          m.longitude = c.lng;
+          m.approxCoords = true; // position approximative (repli)
+          filled++;
+        });
+      }));
+      return filled;
+    }
 
     let suggestItems = [];
     let suggestIndex = -1;
@@ -1555,8 +1638,22 @@
           throw new Error("Aucune célébration exploitable n'a été détectée dans la page.");
         }
 
-        setData(masses);
-        setStatus(`${masses.length} célébration(s) chargée(s) par ${strategy}.`, "success");
+        // Repli de géocodage pour les célébrations sans coordonnées
+        const needGeo = masses.some(m => !(Number.isFinite(m.latitude) && Number.isFinite(m.longitude)));
+        if (needGeo) setStatus("Chargement… géocodage des lieux sans coordonnées.", "warning");
+        const approx = await fillMissingCoords(masses);
+
+        const usable = masses.filter(m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude));
+        if (!usable.length) {
+          throw new Error("Aucune célébration exploitable n'a été détectée dans la page.");
+        }
+
+        setData(usable);
+        setStatus(
+          `${usable.length} célébration(s) chargée(s) par ${strategy}` +
+          (approx ? ` — dont ${approx} replacée(s) approximativement (géocodage).` : "."),
+          "success"
+        );
       } catch (error) {
         console.error(error);
         setStatus(
@@ -1849,7 +1946,8 @@
         const extra = [
           m.parish ? `Paroisse : ${escapeHtml(m.parish)}` : "",
           m.area ? `Espace : ${escapeHtml(m.area)}` : "",
-          m.updated ? `Mise à jour : ${escapeHtml(m.updated)}` : ""
+          m.updated ? `Mise à jour : ${escapeHtml(m.updated)}` : "",
+          m.approxCoords ? "📍 Position approximative (commune)" : ""
         ].filter(Boolean).join("<br>");
 
         // data-stop : empêche le clic sur un lien de sélectionner la carte
