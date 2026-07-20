@@ -77,7 +77,17 @@
 
     .loader-panel { margin-bottom: 18px; }
 
-    .load-grid { grid-template-columns: minmax(280px, 1fr) auto auto; }
+    .load-grid { grid-template-columns: minmax(280px, 1fr) auto; }
+
+    .field-wrap { position: relative; }
+    #placeSearch { padding-right: 42px; }
+    .input-clear {
+      position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+      border: 0; background: transparent; color: var(--muted);
+      font-size: 1rem; line-height: 1; cursor: pointer;
+      padding: 6px 8px; min-height: auto; border-radius: 8px;
+    }
+    .input-clear:hover { color: var(--danger); background: var(--surface-2); transform: translateY(-50%); }
 
     .suggest {
       position: absolute; top: 100%; left: 0; right: 0; z-index: 1200;
@@ -129,7 +139,7 @@
 
     .load-grid {
       display: grid;
-      grid-template-columns: minmax(280px, 1fr) auto auto;
+      grid-template-columns: minmax(280px, 1fr) auto;
       gap: 10px;
       align-items: end;
     }
@@ -193,25 +203,25 @@
 
     .summary {
       display: grid;
-      grid-template-columns: repeat(4, minmax(130px, 1fr));
-      gap: 12px;
-      margin-bottom: 18px;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 10px;
+      margin-bottom: 16px;
     }
 
     .metric {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
+      border-radius: 12px;
+      padding: 9px 11px;
     }
 
     .metric strong {
       display: block;
-      font-size: 1.45rem;
-      margin-top: 3px;
+      font-size: 1.15rem;
+      margin-top: 1px;
     }
 
-    .metric span { color: var(--muted); font-size: .84rem; }
+    .metric span { color: var(--muted); font-size: .76rem; }
 
     .filters {
       display: grid;
@@ -388,6 +398,37 @@
     .cd-empty { color: var(--muted); justify-content: center; }
     .cd-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 
+    /* Panneau « Mes favoris » : accès rapide aux églises épinglées */
+    .fav-panel { margin-bottom: 18px; }
+    .fav-panel-title { margin: 0 0 10px; font-size: 1.1rem; }
+    .fav-list { display: grid; gap: 8px; }
+    .fav-item {
+      display: flex; align-items: center; gap: 11px; width: 100%;
+      text-align: left; padding: 9px 11px; min-height: auto;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; cursor: pointer; transition: .16s ease;
+    }
+    .fav-item:hover { border-color: #aebce9; background: var(--surface-2); transform: none; }
+    .fav-item-ico {
+      flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
+      background: #16a6b6; display: flex; align-items: center; justify-content: center;
+    }
+    .fav-item-ico svg { width: 21px; height: 21px; display: block; }
+    .fav-item-txt { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+    .fav-item-name {
+      font-weight: 800; color: var(--text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .fav-item-place {
+      color: var(--muted); font-size: .84rem;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .fav-item-remove {
+      flex: 0 0 auto; color: var(--muted); font-size: .95rem;
+      padding: 6px 8px; border-radius: 8px; cursor: pointer;
+    }
+    .fav-item-remove:hover { color: var(--danger); background: #fdecea; }
+
     .footer-note {
       color: var(--muted);
       font-size: .78rem;
@@ -408,8 +449,9 @@
 
     @media (max-width: 760px) {
       .app-shell { padding: 10px; }
-      .hero { border-radius: 16px; padding: 18px; }
-      .load-grid, .filters, .summary { grid-template-columns: 1fr; }
+      .hero { border-radius: 14px; padding: 14px 16px; }
+      .load-grid, .filters { grid-template-columns: 1fr; }
+      .summary { grid-template-columns: repeat(2, 1fr); }
       .main-grid { display: flex; flex-direction: column; }
       #map { height: 430px; }
       .result-head { align-items: flex-start; flex-direction: column; }
@@ -421,20 +463,18 @@
   <div class="app-shell">
     <header class="hero">
       <h1>Messes à proximité</h1>
-      <p>
-        Extraction des célébrations de messes.info, recherche multicritère, affichage cartographique,
-        géolocalisation et classement par distance.
-      </p>
     </header>
 
     <section class="panel loader-panel">
       <div class="load-grid">
         <div style="position:relative">
           <label for="placeSearch">Où cherchez-vous une messe ?</label>
-          <input id="placeSearch" placeholder="Ville, code postal ou adresse…" autocomplete="off" />
+          <div class="field-wrap">
+            <input id="placeSearch" placeholder="Ville, code postal ou adresse…" autocomplete="off" />
+            <button id="placeClear" class="input-clear" type="button" aria-label="Effacer la recherche" hidden>✕</button>
+          </div>
           <div id="placeSuggest" class="suggest" hidden></div>
         </div>
-        <button id="searchBtn" class="btn-primary" title="Lancer la recherche">Rechercher</button>
         <button id="locateBtn" class="btn-success">Ma position</button>
       </div>
 
@@ -455,6 +495,11 @@
       <div id="status" class="status">
         Saisissez une commune française, ou cliquez sur « Ma position » : les messes se chargent automatiquement.
       </div>
+    </section>
+
+    <section id="favPanel" class="panel fav-panel" hidden>
+      <h2 class="fav-panel-title">Mes favoris</h2>
+      <div id="favList" class="fav-list"></div>
     </section>
 
     <section class="summary">
@@ -610,6 +655,7 @@
         setStatus(`« ${m.church} » ajouté aux favoris.`, "success");
       }
       saveFavorites();
+      renderFavPanel();
       applyFilters();
     }
 
@@ -619,6 +665,75 @@
       const m = state.favLookup.get(key);
       if (m) toggleFavorite(m);
     };
+
+    // Petite icône « église » (bâtiment blanc) pour la liste des favoris
+    const FAV_CHURCH_SVG =
+      '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="#fff" aria-hidden="true">' +
+      '<rect x="11.25" y="2" width="1.5" height="4.6" rx="0.4"/>' +
+      '<rect x="9.7" y="3.3" width="4.6" height="1.5" rx="0.4"/>' +
+      '<path d="M12 6.6 4.8 11.2V22H10v-4.2a2 2 0 0 1 4 0V22h5.2V11.2z"/>' +
+      '</svg>';
+
+    // Liste « Mes favoris » : accès rapide aux églises épinglées
+    function renderFavPanel() {
+      if (!els.favPanel) return;
+      const entries = Object.entries(state.favorites);
+      if (!entries.length) {
+        els.favPanel.hidden = true;
+        els.favList.innerHTML = "";
+        return;
+      }
+
+      els.favList.innerHTML = entries.map(([key, f]) => `
+        <div class="fav-item" data-fav-key="${escapeHtml(encodeURIComponent(key))}" role="button" tabindex="0"
+             aria-label="Voir les messes de ${escapeHtml(f.church || "")}">
+          <span class="fav-item-ico">${FAV_CHURCH_SVG}</span>
+          <span class="fav-item-txt">
+            <span class="fav-item-name">${escapeHtml(f.church || "")}</span>
+            <span class="fav-item-place">${escapeHtml(f.postalCode || "")} ${escapeHtml(f.city || "")}</span>
+          </span>
+          <span class="fav-item-remove" data-remove role="button" tabindex="0"
+                aria-label="Retirer des favoris" title="Retirer des favoris">✕</span>
+        </div>
+      `).join("");
+      els.favPanel.hidden = false;
+
+      els.favList.querySelectorAll(".fav-item").forEach(item => {
+        const key = decodeURIComponent(item.dataset.favKey);
+        const remove = item.querySelector("[data-remove]");
+        if (remove) {
+          remove.addEventListener("click", e => {
+            e.stopPropagation();
+            delete state.favorites[key];
+            saveFavorites();
+            renderFavPanel();
+            applyFilters();
+            setStatus("Favori retiré.", "");
+          });
+        }
+        const open = () => openFavorite(key);
+        item.addEventListener("click", open);
+        item.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+        });
+      });
+    }
+
+    // Ouvre un favori : recentre sur l'église et charge ses messes
+    function openFavorite(key) {
+      const f = state.favorites[key];
+      if (!f) return;
+      if (!Number.isFinite(f.latitude) || !Number.isFinite(f.longitude)) {
+        setStatus("Coordonnées du favori indisponibles.", "warning");
+        return;
+      }
+      els.placeSearch.value = "";
+      updatePlaceClear();
+      const place = f.city ? ` — ${f.postalCode ? f.postalCode + " " : ""}${f.city}` : "";
+      setOrigin(f.latitude, f.longitude, `${f.church}${place}`, "address");
+      setStatus(`Chargement des messes autour de « ${f.church} »…`, "warning");
+      loadMasses();
+    }
 
     function debounce(fn, delay = 220) {
       let t;
@@ -701,8 +816,8 @@
     }
 
     const els = Object.fromEntries([
-      "placeSearch", "placeSuggest", "searchBtn", "locateBtn", "status",
-      "sourceMode",
+      "placeSearch", "placeSuggest", "placeClear", "locateBtn", "status",
+      "sourceMode", "favPanel", "favList",
       "originBar", "originIcon", "originLabel", "originClear",
       "totalCount", "visibleCount", "cityCount", "nearestValue",
       "textSearch", "cityFilter", "postalFilter", "dayFilter",
@@ -1880,14 +1995,21 @@
     els.resetBtn.addEventListener("click", resetFilters);
     els.csvBtn.addEventListener("click", exportCsv);
 
-    /* Champ de recherche de lieu : suggestions pendant la frappe, navigation
-       clavier et lancement via le bouton « Rechercher » ou la touche Entrée.
-       (Ces écouteurs manquaient : la recherche ne se déclenchait jamais.) */
+    /* Champ de recherche de lieu : les suggestions s'affichent pendant la
+       frappe ; on choisit un lieu dans la liste (ou on valide avec Entrée).
+       La croix efface le champ. */
+    function updatePlaceClear() { if (els.placeClear) els.placeClear.hidden = !els.placeSearch.value; }
     els.placeSearch.addEventListener("input", debounce(searchPlace, 250));
+    els.placeSearch.addEventListener("input", updatePlaceClear);
     els.placeSearch.addEventListener("keydown", handlePlaceKeydown);
     els.placeSearch.addEventListener("focus", () => { if (suggestItems.length) renderSuggest(); });
     els.placeSearch.addEventListener("blur", () => setTimeout(hideSuggest, 150));
-    els.searchBtn.addEventListener("click", submitPlaceSearch);
+    els.placeClear.addEventListener("click", () => {
+      els.placeSearch.value = "";
+      hideSuggest();
+      updatePlaceClear();
+      els.placeSearch.focus();
+    });
 
     // Bouton « Effacer » du point de référence (n'était pas branché non plus)
     els.originClear.addEventListener("click", clearOrigin);
@@ -1922,6 +2044,8 @@
 
     setTimeout(() => map.invalidateSize(), 100);
     restoreSession();
+    renderFavPanel();
+    updatePlaceClear();
   </script>
 </body>
 </html>
