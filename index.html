@@ -479,6 +479,16 @@
     }
     .map-fit-btn:hover { background: var(--surface-2); transform: none; }
 
+    /* Bouton « ma position » superposé au coin inférieur droit de la carte */
+    .map-locate-btn {
+      width: 42px; height: 42px; padding: 0; border: 0; border-radius: 50%;
+      background: #fff; color: var(--primary-dark); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, .35);
+    }
+    .map-locate-btn:hover { background: var(--surface-2); transform: none; }
+    .map-locate-btn svg { width: 22px; height: 22px; display: block; }
+
     .footer-note {
       color: var(--muted);
       font-size: .78rem;
@@ -947,6 +957,39 @@
       }
     });
     map.addControl(new FitControl());
+
+    /* Bouton « ma position » superposé au coin inférieur droit de la carte :
+       centre sur la position locale (GPS). Si elle n'est pas encore connue,
+       il lance la géolocalisation. */
+    function centerOnUser() {
+      if (state.userPosition && state.userPosition.kind === "gps") {
+        map.setView([state.userPosition.lat, state.userPosition.lng], Math.max(map.getZoom(), 14));
+        if (state.userMarker) state.userMarker.openPopup();
+      } else {
+        locateUser();
+      }
+    }
+
+    const LocateControl = L.Control.extend({
+      options: { position: "bottomright" },
+      onAdd() {
+        const btn = L.DomUtil.create("button", "map-locate-btn");
+        btn.type = "button";
+        btn.title = "Centrer sur ma position";
+        btn.setAttribute("aria-label", "Centrer sur ma position");
+        btn.innerHTML =
+          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+          'stroke-linecap="round" aria-hidden="true">' +
+          '<circle cx="12" cy="12" r="7" />' +
+          '<line x1="12" y1="1.5" x2="12" y2="4.5" /><line x1="12" y1="19.5" x2="12" y2="22.5" />' +
+          '<line x1="1.5" y1="12" x2="4.5" y2="12" /><line x1="19.5" y1="12" x2="22.5" y2="12" />' +
+          '<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" /></svg>';
+        L.DomEvent.disableClickPropagation(btn);
+        L.DomEvent.on(btn, "click", centerOnUser);
+        return btn;
+      }
+    });
+    map.addControl(new LocateControl());
 
     state.markerLayer = L.layerGroup().addTo(map);
 
