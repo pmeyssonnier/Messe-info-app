@@ -2286,7 +2286,28 @@
       els.nearestValue.textContent = nearest ? `${nearest.distanceKm.toFixed(1)} km` : "—";
     }
 
+    /* Dédoublonnage : messes.info liste parfois deux fois la même célébration
+       (même église, même date/heure, même intitulé). On les fusionne. */
+    function dedupeMasses(masses) {
+      const seen = new Set();
+      const out = [];
+      for (const m of masses) {
+        const key = [
+          normalize(m.church),
+          String(m.postalCode || "").trim(),
+          normalize(m.city),
+          Number.isFinite(m.timestamp) ? m.timestamp : `${m.dateISO || ""}|${m.hour || ""}`,
+          normalize(m.celebration || "")
+        ].join("¦");
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(m);
+      }
+      return out;
+    }
+
     function setData(masses) {
+      masses = dedupeMasses(masses);
       state.masses = masses;
       state.selectedIndex = null;
       renderChurchDetail(null);
