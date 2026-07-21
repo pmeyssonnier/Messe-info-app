@@ -3,12 +3,14 @@
    - Leaflet (CDN) en stale-while-revalidate ;
    - tuiles / API / proxys : réseau, avec repli sur le cache si présent. */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const CACHE = `messes-pwa-${VERSION}`;
 
 const SHELL = [
   "./",
   "./index.html",
+  "./styles.css",
+  "./app.js",
   "./manifest.webmanifest",
   "./icons/icon-180.png",
   "./icons/icon-192.png",
