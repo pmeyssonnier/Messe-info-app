@@ -424,11 +424,6 @@
     .cd-gcal:hover { text-decoration: underline; }
     .cd-empty { color: var(--muted); justify-content: center; }
     .cd-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-    .cd-photo {
-      width: 100%; max-height: 190px; object-fit: cover;
-      border-radius: 10px; margin-bottom: 10px; display: block;
-      background: var(--surface-2);
-    }
     .cd-fiche-load { margin-top: 8px; font-size: .82rem; color: var(--muted); font-style: italic; }
 
     /* Panneau « Mes favoris » : accès rapide aux églises épinglées */
@@ -2082,49 +2077,19 @@
       return out;
     }
 
-    // Écarte les images de marque/logo/UI (dont l'og:image par défaut du site)
-    function isBrandingImage(src) {
-      return /logo|messes[-_.]?info|favicon|apple-touch|sprite|\bicons?\b|banniere|banner|placeholder|default|pixel|blank|avatar|\bpub\b|\/ads?\//i.test(src);
-    }
-
-    function parseFiche(html, baseUrl) {
+    function parseFiche(html) {
       const doc = new DOMParser().parseFromString(html, "text/html");
-
-      /* Photo : on veut la vraie photo de l'église, pas le logo Messes.info
-         (qui est l'og:image par défaut du site). On collecte les candidats
-         (og/twitter puis images de contenu) et on retient la première qui
-         ressemble à une photo et n'est pas du branding. */
-      const candidates = [];
-      ["og:image", "twitter:image"].forEach(k => {
-        const c = doc.querySelector(`meta[property="${k}"], meta[name="${k}"]`)?.getAttribute("content");
-        if (c) candidates.push(c);
-      });
-      [...doc.querySelectorAll("img")].forEach(im => {
-        const s = im.getAttribute("src") || im.getAttribute("data-src") || im.getAttribute("data-original") || "";
-        if (s) candidates.push(s);
-      });
-
-      let photo = "";
-      for (let c of candidates) {
-        if (!c || /^data:/i.test(c)) continue;
-        if (isBrandingImage(c)) continue;
-        // extension image plausible OU chemin qui évoque une photo/média
-        if (!/\.(jpe?g|png|webp|gif)(\?|#|$)/i.test(c) &&
-            !/(photo|media|image|upload|wiki|cloudinary|amazonaws|storage)/i.test(c)) continue;
-        try { c = new URL(c, baseUrl).href; } catch (e) {}
-        photo = c;
-        break;
-      }
-
-      return { photo, schedule: parseFicheSchedule(doc), loading: false, fetched: true };
+      // On ne récupère que les horaires : la photo des fiches messes.info est
+      // chargée par JavaScript (absente du HTML), donc non extractible ici.
+      return { schedule: parseFicheSchedule(doc), loading: false, fetched: true };
     }
 
     async function loadFiche(mass) {
       const url = mass && mass.detailUrl;
       if (!url || state.detailCache.has(url)) return;
-      state.detailCache.set(url, { loading: true, photo: "", schedule: [], fetched: false });
+      state.detailCache.set(url, { loading: true, schedule: [], fetched: false });
       const html = await fetchHtmlQuiet(url);
-      state.detailCache.set(url, html ? parseFiche(html, url) : { loading: false, photo: "", schedule: [], fetched: false });
+      state.detailCache.set(url, html ? parseFiche(html) : { loading: false, schedule: [], fetched: false });
       // Rafraîchit si le panneau montre toujours cette église
       if (state.detailMass && state.detailMass.detailUrl === url) renderChurchDetail(state.detailMass);
     }
@@ -2149,17 +2114,12 @@
 
       const from = state.userPosition ? `${state.userPosition.lat},${state.userPosition.lng}` : "";
 
-      // Données de la fiche messes.info (photo + horaires habituels), si récupérées
+      // Données de la fiche messes.info (horaires habituels), si récupérées
       const fiche = mass.detailUrl ? state.detailCache.get(mass.detailUrl) : null;
-
-      const photoHtml = fiche && fiche.photo
-        ? `<img class="cd-photo" src="${escapeHtml(fiche.photo)}" alt="${escapeHtml(mass.church)}"
-               loading="lazy" onerror="this.remove()">`
-        : "";
 
       let ficheHtml = "";
       if (fiche && fiche.loading) {
-        ficheHtml = `<div class="cd-fiche-load">📷 Récupération de la fiche (photo &amp; horaires)…</div>`;
+        ficheHtml = `<div class="cd-fiche-load">Récupération des horaires (fiche)…</div>`;
       } else if (fiche && fiche.schedule && fiche.schedule.length) {
         ficheHtml =
           `<div class="cd-title">Horaires habituels (fiche)</div>
@@ -2171,7 +2131,6 @@
       }
 
       els.churchDetail.innerHTML = `
-        ${photoHtml}
         <div class="cd-head">
           <div>
             <div class="cd-church">${escapeHtml(mass.church)}</div>
