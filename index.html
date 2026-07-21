@@ -2287,21 +2287,36 @@
     }
 
     /* Dédoublonnage : messes.info liste parfois deux fois la même célébration
-       (même église, même date/heure, même intitulé). On les fusionne. */
+       au même endroit et au même horaire (parfois avec un intitulé ou un code
+       postal légèrement différent). On fusionne sur église + ville + date/heure
+       et on conserve l'entrée la plus complète (intitulé, paroisse, coordonnées
+       exactes, liens). */
+    function massRichness(m) {
+      return (m.celebration ? 1 : 0) +
+             (m.parish ? 1 : 0) +
+             (m.area ? 1 : 0) +
+             (m.detailUrl ? 1 : 0) +
+             (m.parishUrl ? 1 : 0) +
+             ((Number.isFinite(m.latitude) && Number.isFinite(m.longitude) && !m.approxCoords) ? 1 : 0);
+    }
+
     function dedupeMasses(masses) {
-      const seen = new Set();
+      const index = new Map(); // clé -> position dans out
       const out = [];
       for (const m of masses) {
         const key = [
           normalize(m.church),
-          String(m.postalCode || "").trim(),
           normalize(m.city),
-          Number.isFinite(m.timestamp) ? m.timestamp : `${m.dateISO || ""}|${m.hour || ""}`,
-          normalize(m.celebration || "")
+          Number.isFinite(m.timestamp) ? m.timestamp : `${m.dateISO || ""}|${m.hour || ""}`
         ].join("¦");
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(m);
+
+        if (!index.has(key)) {
+          index.set(key, out.length);
+          out.push(m);
+        } else {
+          const pos = index.get(key);
+          if (massRichness(m) > massRichness(out[pos])) out[pos] = m; // garde le plus complet
+        }
       }
       return out;
     }
