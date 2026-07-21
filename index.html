@@ -718,6 +718,7 @@
       detailMass: null,
       detailCache: new Map(),
       loadedAt: null,
+      searchSeq: 0,
       pageSize: 60,
       shown: 60
     };
@@ -1661,6 +1662,7 @@
 
       if (els.sourceMode.value === "api") return loadFromApi();
 
+      const token = ++state.searchSeq;
       const url = buildSourceUrl(coords.lat, coords.lng);
       try {
         const { text, strategy } = await fetchWithFallback(url);
@@ -1686,6 +1688,10 @@
           (approx ? ` — dont ${approx} replacée(s) approximativement (géocodage).` : "."),
           "success"
         );
+
+        // messes.info ne renvoie qu'~25 célébrations par point : on étend la
+        // recherche autour de la zone, en arrière-plan, pour en récupérer plus.
+        expandSearch(coords, usable, token);
       } catch (error) {
         console.error(error);
         setStatus(
@@ -1694,6 +1700,58 @@
           "error"
         );
       }
+    }
+
+    /* Extension de recherche : messes.info ne renvoie qu'~25 célébrations par
+       point. On interrogé une couronne de 8 points autour du centre (rayon
+       déduit de l'étalement des premiers résultats), en parallèle et en
+       arrière-plan, puis on fusionne + dédoublonne. Sans clé. */
+    async function expandSearch(center, initial, token) {
+      try {
+        let maxKm = 0;
+        initial.forEach(m => {
+          const d = haversineKm(center.lat, center.lng, m.latitude, m.longitude);
+          if (Number.isFinite(d)) maxKm = Math.max(maxKm, d);
+        });
+        const ringKm = Math.min(Math.max(maxKm || 10, 8), 40);
+        const cosLat = Math.cos(center.lat * Math.PI / 180) || 1;
+
+        const points = [];
+        for (let i = 0; i < 8; i++) {
+          const ang = (Math.PI / 4) * i;
+          points.push({
+            lat: center.lat + (ringKm / 111) * Math.cos(ang),
+            lng: center.lng + (ringKm / (111 * cosLat)) * Math.sin(ang)
+          });
+        }
+
+        setStatus("Extension de la recherche autour de la zone…", "warning");
+
+        const settled = await Promise.allSettled(points.map(p => {
+          const u = buildSourceUrl(p.lat, p.lng);
+          return fetchHtmlQuiet(u).then(html => html ? parseMessesInfo(html, u) : []);
+        }));
+
+        // Une nouvelle recherche a été lancée entre-temps : on abandonne
+        if (token !== state.searchSeq) return;
+
+        let extra = [];
+        settled.forEach(r => { if (r.status === "fulfilled" && Array.isArray(r.value)) extra = extra.concat(r.value); });
+        if (!extra.length) return;
+
+        const merged = state.masses.concat(extra);
+        await fillMissingCoords(merged);
+        if (token !== state.searchSeq) return;
+
+        const before = state.masses.length;
+        const usable = merged.filter(m => Number.isFinite(m.latitude) && Number.isFinite(m.longitude));
+        setData(usable); // dédoublonnage inclus
+        const after = state.masses.length;
+
+        if (after > before) {
+          setStatus(`Recherche étendue : ${after} célébration(s) au total (${after - before} de plus).`, "success");
+        }
+      } catch (e) { /* extension best-effort : on garde les résultats initiaux */ }
     }
 
     function haversineKm(lat1, lon1, lat2, lon2) {
