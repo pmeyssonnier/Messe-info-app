@@ -2098,15 +2098,15 @@
       }
       if (photo) { try { photo = new URL(photo, baseUrl).href; } catch (e) {} }
 
-      return { photo, schedule: parseFicheSchedule(doc), loading: false };
+      return { photo, schedule: parseFicheSchedule(doc), loading: false, fetched: true };
     }
 
     async function loadFiche(mass) {
       const url = mass && mass.detailUrl;
       if (!url || state.detailCache.has(url)) return;
-      state.detailCache.set(url, { loading: true, photo: "", schedule: [] });
+      state.detailCache.set(url, { loading: true, photo: "", schedule: [], fetched: false });
       const html = await fetchHtmlQuiet(url);
-      state.detailCache.set(url, html ? parseFiche(html, url) : { loading: false, photo: "", schedule: [] });
+      state.detailCache.set(url, html ? parseFiche(html, url) : { loading: false, photo: "", schedule: [], fetched: false });
       // Rafraîchit si le panneau montre toujours cette église
       if (state.detailMass && state.detailMass.detailUrl === url) renderChurchDetail(state.detailMass);
     }
@@ -2141,13 +2141,15 @@
 
       let ficheHtml = "";
       if (fiche && fiche.loading) {
-        ficheHtml = `<div class="cd-fiche-load">Récupération de la fiche…</div>`;
+        ficheHtml = `<div class="cd-fiche-load">📷 Récupération de la fiche (photo &amp; horaires)…</div>`;
       } else if (fiche && fiche.schedule && fiche.schedule.length) {
         ficheHtml =
           `<div class="cd-title">Horaires habituels (fiche)</div>
            <ul class="cd-list">${fiche.schedule.map(s => `
              <li><span class="cd-date">${escapeHtml(s.time)}</span>${s.label
                ? `<span class="cd-cel">${escapeHtml(s.label)}</span>` : ""}</li>`).join("")}</ul>`;
+      } else if (fiche && fiche.fetched === false) {
+        ficheHtml = `<div class="cd-fiche-load">Fiche messes.info indisponible pour le moment (proxy/réseau). Réessayez plus tard ou ouvrez « Fiche complète ».</div>`;
       }
 
       els.churchDetail.innerHTML = `
