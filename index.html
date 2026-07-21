@@ -444,6 +444,12 @@
     .cd-links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     .cd-fiche-load { margin-top: 8px; font-size: .82rem; color: var(--muted); font-style: italic; }
 
+    .refresh-info {
+      margin: 0 0 10px; font-size: .8rem; color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .refresh-info::before { content: "🕒"; }
+
     /* Panneau « Mes favoris » : accès rapide aux églises épinglées */
     .fav-panel { margin-bottom: 18px; }
     .fav-panel-title { margin: 0 0 10px; font-size: 1.1rem; }
@@ -675,6 +681,7 @@
             </button>
           </div>
         </div>
+        <div id="refreshInfo" class="refresh-info" hidden></div>
         <div id="churchDetail" class="church-detail" hidden></div>
         <div id="results" class="results">
           <div class="empty">Aucune donnée chargée.</div>
@@ -710,6 +717,7 @@
       selectedIndex: null,
       detailMass: null,
       detailCache: new Map(),
+      loadedAt: null,
       pageSize: 60,
       shown: 60
     };
@@ -852,6 +860,7 @@
           userKey: els.userKey.value,
           sourceMode: els.sourceMode.value,
           masses: state.masses,
+          loadedAt: state.loadedAt,
           userPosition: state.userPosition,
           filters: {
             textSearch: els.textSearch.value,
@@ -882,6 +891,8 @@
         if (data.sourceMode) els.sourceMode.value = data.sourceMode;
         state.userPosition = data.userPosition || null;
         state.masses = data.masses;
+        state.loadedAt = Number.isFinite(data.loadedAt) ? data.loadedAt : (data.savedAt || null);
+        updateRefreshInfo();
         rebuildFilterOptions();
 
         /* Un filtre mémorisé peut ne plus exister dans le nouveau jeu de
@@ -916,7 +927,7 @@
       "sourceMode", "favPanel", "favList",
       "totalCount", "visibleCount", "cityCount", "nearestValue",
       "textSearch", "cityFilter", "postalFilter", "dayFilter",
-      "dateFrom", "maxDistance", "resetBtn", "results", "churchDetail", "csvBtn",
+      "dateFrom", "maxDistance", "resetBtn", "results", "refreshInfo", "churchDetail", "csvBtn",
       "sortBy", "onlyFuture", "onlyFav", "moreBtn", "icsBtn",
       "apiLat", "apiLng", "apiDays", "userKey"
     ].map(id => [id, document.getElementById(id)]));
@@ -2321,9 +2332,23 @@
       return out;
     }
 
+    // « Horaires récupérés le 21 juillet 2026 à 22:15. »
+    function updateRefreshInfo() {
+      if (!els.refreshInfo) return;
+      const ts = state.loadedAt;
+      if (!Number.isFinite(ts)) { els.refreshInfo.hidden = true; els.refreshInfo.textContent = ""; return; }
+      const d = new Date(ts);
+      const date = d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+      const time = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+      els.refreshInfo.textContent = `Horaires récupérés le ${date} à ${time}.`;
+      els.refreshInfo.hidden = false;
+    }
+
     function setData(masses) {
       masses = dedupeMasses(masses);
       state.masses = masses;
+      state.loadedAt = Date.now();
+      updateRefreshInfo();
       state.selectedIndex = null;
       renderChurchDetail(null);
       updateDistances();
