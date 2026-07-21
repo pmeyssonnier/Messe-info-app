@@ -1,0 +1,20 @@
+{
+  "name": "Messes à proximité",
+  "short_name": "Messes",
+  "description": "Trouver les messes à proximité : recherche par ville ou adresse, carte, favoris et export.",
+  "lang": "fr",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f5f7fb",
+  "theme_color": "#3157d5",
+  "categories": ["lifestyle", "travel", "utilities"],
+  "icons": [
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "./icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
