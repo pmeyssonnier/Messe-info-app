@@ -1366,6 +1366,7 @@
       });
       const keys = [...groups.keys()].sort((a, b) =>
         (groups.get(a)[0].m.timestamp || 0) - (groups.get(b)[0].m.timestamp || 0));
+      const someKept = keys.some(k => openSet.has(k));
 
       els.results.innerHTML = keys.map((k, gi) => {
         const items = groups.get(k);
@@ -1394,7 +1395,7 @@
             </div>`;
         }).join("");
 
-        const open = openSet.has(k) || (openSet.size === 0 && gi === 0);
+        const open = openSet.has(k) || (!someKept && gi === 0);
         return `<details class="grp" data-gkey="${escapeHtml(k)}"${open ? " open" : ""}>
             <summary class="grp-sum">
               <span class="grp-title">${escapeHtml(dateHeading(items[0].m))}</span>
@@ -1419,6 +1420,7 @@
       });
       const lieux = [...groups.entries()].sort((a, b) =>
         placeDist(a[1][0].m) - placeDist(b[1][0].m) || a[1][0].m.church.localeCompare(b[1][0].m.church, "fr"));
+      const someKept = lieux.some(([pk]) => openSet.has(pk));
 
       els.results.innerHTML = lieux.map(([pk, items], gi) => {
         const m = items[0].m;
@@ -1432,7 +1434,7 @@
             </div>`;
         }).join("");
 
-        const open = openSet.has(pk) || (openSet.size === 0 && gi === 0);
+        const open = openSet.has(pk) || (!someKept && gi === 0);
         return `<details class="grp" data-gkey="${escapeHtml(pk)}"${open ? " open" : ""}>
             <summary class="grp-sum">
               <span class="grp-title">

@@ -3,7 +3,7 @@
    - Leaflet (CDN) en stale-while-revalidate ;
    - tuiles / API / proxys : réseau, avec repli sur le cache si présent. */
 
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE = `messes-pwa-${VERSION}`;
 
 const SHELL = [
@@ -54,13 +54,15 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Même origine (coquille, icônes) : cache d'abord
+  // Même origine (coquille, icônes) : réseau d'abord pour toujours servir la
+  // dernière version publiée (app.js, styles.css…), repli sur le cache
+  // hors-ligne. Évite qu'un ancien app.js mis en cache masque les mises à jour.
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(request).then((cached) => cached || fetch(request).then((res) => {
+      fetch(request).then((res) => {
         if (res && res.ok) putInCache(request, res);
         return res;
-      }))
+      }).catch(() => caches.match(request))
     );
     return;
   }
