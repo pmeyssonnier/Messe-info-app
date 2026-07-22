@@ -353,6 +353,54 @@
       padding: 48px 16px;
     }
 
+    /* Vues groupées en accordéon (tri par date ou par lieu) */
+    .grp {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #fff;
+      margin-bottom: 8px;
+      overflow: hidden;
+    }
+    .grp > summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 11px 13px;
+      font-weight: 750;
+    }
+    .grp > summary::-webkit-details-marker { display: none; }
+    .grp > summary::before {
+      content: "\25B8";
+      color: var(--primary);
+      font-size: .9em;
+      flex: 0 0 auto;
+      transition: transform .15s ease;
+    }
+    .grp[open] > summary::before { transform: rotate(90deg); }
+    .grp-title { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+    .grp-title .place { font-weight: 500; margin-top: 0; }
+    .grp-count { margin-left: auto; color: var(--muted); font-size: .8rem; font-weight: 600; white-space: nowrap; }
+    .grp-sum .distance { margin-left: auto; }
+
+    .grp-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 13px;
+      border-top: 1px solid var(--surface-2);
+      cursor: pointer;
+    }
+    .grp-row:hover { background: var(--surface-2); }
+    .grp-row.selected { background: #eef2ff; box-shadow: inset 3px 0 0 var(--primary); }
+    .grp-row-main { min-width: 0; }
+    .grp-church { font-weight: 800; }
+    .grp-times { color: var(--primary-dark); font-weight: 700; font-size: .9rem; margin-top: 3px; }
+    .grp-date { font-weight: 700; }
+    .grp-row .fav-btn { font-size: 1.1rem; vertical-align: middle; }
+
     /* Bouton favori (étoile) sur les cartes et dans les popups */
     .fav-btn {
       background: transparent;

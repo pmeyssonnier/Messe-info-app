@@ -206,7 +206,7 @@
         applyIfValid(els.dayFilter, f.dayFilter);
         els.dateFrom.value = f.dateFrom || "";
         els.maxDistance.value = f.maxDistance || "";
-        if (els.sortBy) els.sortBy.value = f.sortBy || "auto";
+        if (els.sortBy) els.sortBy.value = f.sortBy || "date";
         if (els.onlyFuture) els.onlyFuture.checked = !!f.onlyFuture;
         if (els.onlyFav) els.onlyFav.checked = !!f.onlyFav;
         updateDistances();
@@ -1251,46 +1251,87 @@
       }
     }
 
+    // Étoile favori réutilisable (idx = index dans state.filtered)
+    function favStar(idx, fav) {
+      return `<button class="fav-btn ${fav ? "active" : ""}" data-fav="${idx}" data-stop
+                 aria-pressed="${fav}" title="${fav ? "Retirer des favoris" : "Ajouter aux favoris"}">${fav ? "★" : "☆"}</button>`;
+    }
+
+    // Clé d'un lieu (église) + sa distance (regroupement / tri)
+    function placeKey(m) { return `${normalize(m.church)}¦${(m.postalCode || "").trim()}¦${normalize(m.city)}`; }
+    function placeDist(m) { return m.distanceKm == null ? Infinity : m.distanceKm; }
+
+    // « Dimanche 26 juillet 2026 » ; heure « 10h30 »
+    function dateHeading(m) {
+      if (!Number.isFinite(m.timestamp)) return m.dateISO || "Date inconnue";
+      const s = new Date(m.timestamp).toLocaleDateString("fr-FR",
+        { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+      return s.charAt(0).toUpperCase() + s.slice(1);
+    }
+    function timeLabel(m) { return (m.hour || "").replace(":", "h"); }
+
+    function itineraryUrl(m) {
+      const from = state.userPosition ? `${state.userPosition.lat},${state.userPosition.lng}` : "";
+      return `https://www.google.com/maps/dir/?api=1&origin=${from}&destination=${m.latitude},${m.longitude}`;
+    }
+
+    // Liens (chips) d'une célébration
+    function massLinks(m) {
+      return [
+        m.parishUrl ? `<a class="chip" data-stop href="${escapeHtml(m.parishUrl)}" target="_blank" rel="noopener">Horaires de la paroisse</a>` : "",
+        m.detailUrl ? `<a class="chip" data-stop href="${escapeHtml(m.detailUrl)}" target="_blank" rel="noopener">Fiche du lieu</a>` : "",
+        `<a class="chip" data-stop target="_blank" rel="noopener" href="${itineraryUrl(m)}">Itinéraire</a>`,
+        googleCalUrl(m) ? `<a class="chip" data-stop href="${escapeHtml(googleCalUrl(m))}" target="_blank" rel="noopener">Google Agenda</a>` : ""
+      ].filter(Boolean).join("");
+    }
+
+    // Groupes d'accordéon actuellement ouverts (pour préserver l'état au re-rendu)
+    function openGroupKeys() {
+      return new Set([...els.results.querySelectorAll("details.grp[open]")].map(d => d.dataset.gkey));
+    }
+
+    // Écouteurs communs à toutes les vues (favoris, liens, sélection)
+    function wireResultListeners() {
+      els.results.querySelectorAll("a[data-stop]").forEach(a =>
+        a.addEventListener("click", e => e.stopPropagation()));
+
+      els.results.querySelectorAll(".fav-btn").forEach(btn =>
+        btn.addEventListener("click", e => {
+          e.preventDefault(); e.stopPropagation();
+          toggleFavorite(state.filtered[Number(btn.dataset.fav)]);
+        }));
+
+      els.results.querySelectorAll(".mass-card, .grp-row").forEach(el => {
+        const go = () => selectCard(Number(el.dataset.index));
+        el.addEventListener("click", go);
+        el.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+      });
+    }
+
+    // Aiguillage selon le tri choisi
     function renderList() {
       if (!state.filtered.length) {
         els.results.innerHTML = '<div class="empty">Aucune célébration ne correspond aux filtres.</div>';
+        if (els.moreBtn) els.moreBtn.style.display = "none";
         return;
       }
+      const sortBy = els.sortBy ? els.sortBy.value : "auto";
+      if (sortBy === "date") renderByDate();
+      else if (sortBy === "city") renderByPlace();
+      else renderFlat();
+    }
 
+    // Vue « à plat » (tri Automatique / Distance)
+    function renderFlat() {
       const slice = state.filtered.slice(0, state.shown);
       els.results.innerHTML = slice.map((m, index) => {
-        const distance = m.distanceKm == null
-          ? ""
-          : `<span class="distance">${m.distanceKm.toFixed(1)} km</span>`;
-
-        const fav = isFavorite(m);
-        const favBtn =
-          `<button class="fav-btn ${fav ? "active" : ""}" data-fav="${index}" data-stop
-                   aria-pressed="${fav}"
-                   title="${fav ? "Retirer des favoris" : "Ajouter aux favoris"}">${fav ? "★" : "☆"}</button>`;
-
+        const distance = m.distanceKm == null ? "" : `<span class="distance">${m.distanceKm.toFixed(1)} km</span>`;
         const extra = [
           m.parish ? `Paroisse : ${escapeHtml(m.parish)}` : "",
           m.area ? `Espace : ${escapeHtml(m.area)}` : "",
           m.updated ? `Mise à jour : ${escapeHtml(m.updated)}` : "",
           m.approxCoords ? "📍 Position approximative (commune)" : ""
         ].filter(Boolean).join("<br>");
-
-        // data-stop : empêche le clic sur un lien de sélectionner la carte
-        const links = [
-          m.parishUrl
-            ? `<a class="chip" data-stop href="${escapeHtml(m.parishUrl)}" target="_blank" rel="noopener">Horaires de la paroisse</a>`
-            : "",
-          m.detailUrl
-            ? `<a class="chip" data-stop href="${escapeHtml(m.detailUrl)}" target="_blank" rel="noopener">Fiche du lieu</a>`
-            : "",
-          `<a class="chip" data-stop target="_blank" rel="noopener"
-              href="https://www.google.com/maps/dir/?api=1&origin=${state.userPosition ? `${state.userPosition.lat},${state.userPosition.lng}` : ""}&destination=${m.latitude},${m.longitude}">Itinéraire</a>`,
-          googleCalUrl(m)
-            ? `<a class="chip" data-stop href="${escapeHtml(googleCalUrl(m))}" target="_blank" rel="noopener">Google Agenda</a>`
-            : ""
-        ].filter(Boolean).join("");
-
         return `
           <article class="mass-card" data-index="${index}" tabindex="0" role="button"
                    aria-label="${escapeHtml(m.church)} ${escapeHtml(m.city)} ${escapeHtml(displayDate(m))}">
@@ -1299,42 +1340,113 @@
                 <div class="date">${escapeHtml(displayDate(m))}</div>
                 <div class="church">${escapeHtml(m.church)}</div>
               </div>
-              <div class="mass-actions">
-                ${favBtn}
-                ${distance}
-              </div>
+              <div class="mass-actions">${favStar(index, isFavorite(m))}${distance}</div>
             </div>
             <div class="place">${escapeHtml(m.postalCode)} ${escapeHtml(m.city)}</div>
             <div class="meta">${extra}</div>
-            <div class="chips">${links}</div>
-          </article>
-        `;
+            <div class="chips">${massLinks(m)}</div>
+          </article>`;
       }).join("");
-
-      els.results.querySelectorAll("a[data-stop]").forEach(a => {
-        a.addEventListener("click", e => e.stopPropagation());
-      });
-
-      els.results.querySelectorAll(".fav-btn").forEach(btn => {
-        btn.addEventListener("click", e => {
-          e.stopPropagation();
-          toggleFavorite(state.filtered[Number(btn.dataset.fav)]);
-        });
-      });
-
-      els.results.querySelectorAll(".mass-card").forEach(card => {
-        const go = () => selectCard(Number(card.dataset.index));
-        card.addEventListener("click", go);
-        card.addEventListener("keydown", e => {
-          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
-        });
-      });
-
+      wireResultListeners();
       if (els.moreBtn) {
         const rest = state.filtered.length - slice.length;
         els.moreBtn.style.display = rest > 0 ? "" : "none";
         els.moreBtn.textContent = `Afficher ${Math.min(rest, state.pageSize)} de plus (${rest} restantes)`;
       }
+    }
+
+    // Vue « par date » : un accordéon par jour, lieux triés par distance
+    function renderByDate() {
+      const openSet = openGroupKeys();
+      const groups = new Map();
+      state.filtered.forEach((m, idx) => {
+        const key = m.dateISO || (Number.isFinite(m.timestamp) ? String(m.timestamp) : "?");
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push({ m, idx });
+      });
+      const keys = [...groups.keys()].sort((a, b) =>
+        (groups.get(a)[0].m.timestamp || 0) - (groups.get(b)[0].m.timestamp || 0));
+
+      els.results.innerHTML = keys.map((k, gi) => {
+        const items = groups.get(k);
+        const byPlace = new Map();
+        items.forEach(it => {
+          const pk = placeKey(it.m);
+          if (!byPlace.has(pk)) byPlace.set(pk, []);
+          byPlace.get(pk).push(it);
+        });
+        const lieux = [...byPlace.values()].sort((a, b) =>
+          placeDist(a[0].m) - placeDist(b[0].m) || a[0].m.church.localeCompare(b[0].m.church, "fr"));
+
+        const rows = lieux.map(group => {
+          const m = group[0].m;
+          const idx = group[0].idx;
+          const times = group.slice().sort((a, b) => (a.m.timestamp || 0) - (b.m.timestamp || 0))
+            .map(it => escapeHtml(timeLabel(it.m))).filter(Boolean).join(" · ");
+          const dist = m.distanceKm == null ? "" : `<span class="distance">${m.distanceKm.toFixed(1)} km</span>`;
+          return `<div class="grp-row" data-index="${idx}" role="button" tabindex="0">
+              <div class="grp-row-main">
+                <div class="grp-church">${escapeHtml(m.church)} ${favStar(idx, isFavorite(m))}</div>
+                <div class="place">${escapeHtml(m.postalCode)} ${escapeHtml(m.city)}</div>
+                ${times ? `<div class="grp-times">${times}</div>` : ""}
+              </div>
+              ${dist}
+            </div>`;
+        }).join("");
+
+        const open = openSet.has(k) || (openSet.size === 0 && gi === 0);
+        return `<details class="grp" data-gkey="${escapeHtml(k)}"${open ? " open" : ""}>
+            <summary class="grp-sum">
+              <span class="grp-title">${escapeHtml(dateHeading(items[0].m))}</span>
+              <span class="grp-count">${lieux.length} lieu${lieux.length > 1 ? "x" : ""}</span>
+            </summary>
+            ${rows}
+          </details>`;
+      }).join("");
+
+      wireResultListeners();
+      if (els.moreBtn) els.moreBtn.style.display = "none";
+    }
+
+    // Vue « par lieu » : un accordéon par église (triée par distance), avec ses dates
+    function renderByPlace() {
+      const openSet = openGroupKeys();
+      const groups = new Map();
+      state.filtered.forEach((m, idx) => {
+        const pk = placeKey(m);
+        if (!groups.has(pk)) groups.set(pk, []);
+        groups.get(pk).push({ m, idx });
+      });
+      const lieux = [...groups.entries()].sort((a, b) =>
+        placeDist(a[1][0].m) - placeDist(b[1][0].m) || a[1][0].m.church.localeCompare(b[1][0].m.church, "fr"));
+
+      els.results.innerHTML = lieux.map(([pk, items], gi) => {
+        const m = items[0].m;
+        const dist = m.distanceKm == null ? "" : `<span class="distance">${m.distanceKm.toFixed(1)} km</span>`;
+        const rows = items.slice().sort((a, b) => (a.m.timestamp || 0) - (b.m.timestamp || 0)).map(it => {
+          const mm = it.m;
+          const g = googleCalUrl(mm);
+          return `<div class="grp-row" data-index="${it.idx}" role="button" tabindex="0">
+              <div class="grp-date">${escapeHtml(displayDate(mm))}${mm.celebration ? ` <span class="cd-cel">${escapeHtml(mm.celebration)}</span>` : ""}</div>
+              ${g ? `<a class="chip" data-stop href="${escapeHtml(g)}" target="_blank" rel="noopener">+ Agenda</a>` : ""}
+            </div>`;
+        }).join("");
+
+        const open = openSet.has(pk) || (openSet.size === 0 && gi === 0);
+        return `<details class="grp" data-gkey="${escapeHtml(pk)}"${open ? " open" : ""}>
+            <summary class="grp-sum">
+              <span class="grp-title">
+                <span class="grp-church">${escapeHtml(m.church)} ${favStar(items[0].idx, isFavorite(m))}</span>
+                <span class="place">${escapeHtml(m.postalCode)} ${escapeHtml(m.city)} · ${items.length} date${items.length > 1 ? "s" : ""}</span>
+              </span>
+              ${dist}
+            </summary>
+            ${rows}
+          </details>`;
+      }).join("");
+
+      wireResultListeners();
+      if (els.moreBtn) els.moreBtn.style.display = "none";
     }
 
     /* Toutes les célébrations à venir du même lieu (même église), triées
@@ -1486,8 +1598,9 @@
 
     function selectCard(index) {
       state.selectedIndex = index;
-      els.results.querySelectorAll(".mass-card").forEach((card, i) => {
-        card.classList.toggle("selected", i === index);
+      // Surlignage par correspondance de data-index (marche à plat ET en accordéon)
+      els.results.querySelectorAll("[data-index]").forEach(el => {
+        el.classList.toggle("selected", Number(el.dataset.index) === index);
       });
 
       const marker = state.markers[index];
@@ -1496,10 +1609,12 @@
         renderChurchDetail(mass);
         map.setView([mass.latitude, mass.longitude], Math.max(map.getZoom(), 14));
         marker.openPopup();
-        els.results.querySelector(`[data-index="${index}"]`)?.scrollIntoView({
-          block: "nearest",
-          behavior: "smooth"
-        });
+        const el = els.results.querySelector(`[data-index="${index}"]`);
+        if (el) {
+          const grp = el.closest("details.grp");
+          if (grp && !grp.open) grp.open = true; // déplie l'accordéon contenant
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
       }
     }
 
@@ -1682,7 +1797,7 @@
       els.dayFilter.value = "";
       els.dateFrom.value = "";
       els.maxDistance.value = "";
-      els.sortBy.value = "auto";
+      els.sortBy.value = "date";
       els.onlyFuture.checked = false;
       if (els.onlyFav) els.onlyFav.checked = false;
       applyFilters(true);
